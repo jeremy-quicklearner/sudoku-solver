@@ -9,6 +9,11 @@ Guess = namedtuple('Guess', ['id', 'n', 'choices'])
 Elimination = namedtuple('Elimination', ['id', 'n'])
 EliminationChain = namedtuple('EliminationChain', ['guess', 'eliminations'])
 
+eliminate_count = 0
+restore_count = 0
+guess_count = 0
+unguess_count = 0
+
 class Cell(object):
     def __init__(self, id, given=0):
         self.id_ = id
@@ -25,30 +30,38 @@ class Cell(object):
         return sorted(self.couldBe_)
 
     def eliminate(self, n):
+        global eliminate_count
         if n in self.couldBe_:
             self.couldBe_ -= set([n])
             e = Elimination(self.id_, n)
+            eliminate_count += 1
         else:
             e = None
         return e
 
     def restore(self, e):
+        global restore_count
         if e.id != self.id_:
             raise Exception('Can\'t restore %s to cell %s as it was eliminated from cell %s' % (e.n, self.id_, e.id))
         if e.n in self.couldBe_:
             raise Exception('Can\'t restore %s to cell %s as it is already a possibility' % (e.n, e.id))
+        restore_count += 1
         self.couldBe_ = self.couldBe_.union(set([e.n]))
 
     def guess(self):
+        global guess_count
         n = min(self.couldBe())
         g = Guess(self.id_, n, self.couldBe_)
         self.couldBe_ = set([n])
+        guess_count += 1
         return g
 
     def unguess(self, g):
+        global unguess_count
         if g.id != self.id_:
             raise Exception('Can\'t unguess %s to cell %s as it was guessed in cell %s' % (g.n, self.id_, g.id))
         self.couldBe_ = g.choices
+        unguess_count += 1
         return self.eliminate(g.n)
 
 class Group(object):
@@ -220,8 +233,10 @@ while not g.solved():
 
     eliminationsFromReduction = []
     for group in g.groups():
-        print('\033[F' * 40, end='\r')
+        print('\033[F' * 45, end='\r')
         print(g)
+        print('Guesses: %d (%d correct, %d backtracked)' % (guess_count, guess_count - unguess_count, unguess_count))
+        print('Eliminations: %d (%d correct, %d restored)' % (eliminate_count, eliminate_count - restore_count, restore_count))
         eliminationsFromReduction += group.reduce()
 
     if eliminationsFromReduction:
