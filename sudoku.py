@@ -4,7 +4,6 @@ from collections import namedtuple
 from os import system
 from time import sleep
 from random import choice
-import Tac
 
 Guess = namedtuple('Guess', ['id', 'n', 'choices'])
 Elimination = namedtuple('Elimination', ['id', 'n'])
