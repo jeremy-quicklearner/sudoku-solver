@@ -129,7 +129,6 @@ class Grid(object):
                 raster += '\033[32m#-------+-------+-------#-------+-------+-------#-------+-------+-------#\033[0m\n'
         return raster
 
-    # TODO: CACHE
     def row(self, idx):
         if idx not in range(0,9):
             raise Exception('Illegal row index %s' % idx)
@@ -231,8 +230,8 @@ def arr2grid(arr):
 def printGrid(g):
     print('\033[F' * 45, end='\r')
     print(g)
-    print('Guesses: %d (%d correct, %d backtracked)' % (guess_count, guess_count - unguess_count, unguess_count))
-    print('Eliminations: %d (%d correct, %d restored)' % (eliminate_count, eliminate_count - restore_count, restore_count))
+    print('Guesses: %d (%d correct, %d backtracked)  ' % (guess_count, guess_count - unguess_count, unguess_count))
+    print('Eliminations: %d (%d correct, %d restored)  ' % (eliminate_count, eliminate_count - restore_count, restore_count))
 
 def solve(g, naive=False):
     system('clear')
