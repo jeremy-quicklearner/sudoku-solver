@@ -17,6 +17,7 @@ unguess_count = 0
 class Cell(object):
     def __init__(self, id, given=0):
         self.id_ = id
+        self.couldBeCache_ = []
         if given == 0:
             self.couldBe_ = set(range(1,10))
         else:
@@ -26,8 +27,9 @@ class Cell(object):
         return self.id_
 
     def couldBe(self):
-        # TODO: cache
-        return sorted(self.couldBe_)
+        if not self.couldBeCache_:
+            self.couldBeCache_ = sorted(self.couldBe_)
+        return self.couldBeCache_
 
     def eliminate(self, n):
         global eliminate_count
@@ -35,6 +37,7 @@ class Cell(object):
             self.couldBe_ -= set([n])
             e = Elimination(self.id_, n)
             eliminate_count += 1
+            self.couldBeCache_ = []
         else:
             e = None
         return e
@@ -46,6 +49,7 @@ class Cell(object):
         if e.n in self.couldBe_:
             raise Exception('Can\'t restore %s to cell %s as it is already a possibility' % (e.n, e.id))
         restore_count += 1
+        self.couldBeCache_ = []
         self.couldBe_ = self.couldBe_.union(set([e.n]))
 
     def guess(self):
@@ -54,6 +58,7 @@ class Cell(object):
         g = Guess(self.id_, n, self.couldBe_)
         self.couldBe_ = set([n])
         guess_count += 1
+        self.couldBeCache_ = []
         return g
 
     def unguess(self, g):
@@ -62,6 +67,7 @@ class Cell(object):
             raise Exception('Can\'t unguess %s to cell %s as it was guessed in cell %s' % (g.n, self.id_, g.id))
         self.couldBe_ = g.choices
         unguess_count += 1
+        self.couldBeCache_ = []
         return self.eliminate(g.n)
 
 class Group(object):
@@ -88,6 +94,9 @@ class Grid(object):
     def __init__(self, givens):
         self.cells_ = [ None for i in range(0, 9 * 9)]
         givensById = {g.id() : g for g in givens}
+        self.rowCache_ = {}
+        self.colCache_ = {}
+        self.boxCache_ = {}
 
         for i in range(0,9 * 9):
             if i in givensById:
@@ -124,10 +133,12 @@ class Grid(object):
     def row(self, idx):
         if idx not in range(0,9):
             raise Exception('Illegal row index %s' % idx)
-        cells = []
-        for col in range(0,9):
-            cells.append(self.cells_[idx * 9 + col])
-        return Group(cells)
+        if idx not in self.rowCache_:
+            cells = []
+            for col in range(0,9):
+                cells.append(self.cells_[idx * 9 + col])
+            self.rowCache_[idx] = Group(cells)
+        return self.rowCache_[idx]
     def rows(self):
         res = []
         for idx in range(0,9):
@@ -137,10 +148,12 @@ class Grid(object):
     def col(self, idx):
         if idx not in range(0,9):
             raise Exception('Illegal column index %s' % idx)
-        cells = []
-        for row in range(0,9):
-            cells.append(self.cells_[row * 9 + idx])
-        return Group(cells)
+        if idx not in self.colCache_:
+            cells = []
+            for row in range(0,9):
+                cells.append(self.cells_[row * 9 + idx])
+            self.colCache_[idx] = Group(cells)
+        return self.colCache_[idx]
     def cols(self):
         res = []
         for idx in range(0,9):
@@ -150,12 +163,14 @@ class Grid(object):
     def box(self, idx):
         if idx not in range(0,9):
             raise Exception('Illegal box index %s' % idx)
-        cells = []
-        for subidx in range(0,9):
-            row = (idx / 3) * 3 + (subidx / 3)
-            col = (idx % 3) * 3 + (subidx % 3)
-            cells.append(self.cells_[row * 9 + col])
-        return Group(cells)
+        if idx not in self.boxCache_:
+            cells = []
+            for subidx in range(0,9):
+                row = (idx / 3) * 3 + (subidx / 3)
+                col = (idx % 3) * 3 + (subidx % 3)
+                cells.append(self.cells_[row * 9 + col])
+            self.boxCache_[idx] = Group(cells)
+        return self.boxCache_[idx]
     def boxes(self):
         res = []
         for idx in range(0,9):
@@ -180,6 +195,13 @@ class Grid(object):
         return bestCell
 
     def contradictory(self):
+        if naive:
+            for group in self.groups():
+                for cell in group.cells_:
+                    if len(cell.couldBe()) == 1:
+                        for otherCell in group.cells_:
+                            if cell != otherCell and len(otherCell.couldBe()) == 1 and cell.couldBe()[0] == otherCell.couldBe()[0]:
+                                return True
         for cell in self.cells_:
             if len(cell.couldBe()) == 0:
                 return True
@@ -206,6 +228,43 @@ def arr2grid(arr):
                 cells.append(Cell(i * 9 + j, arr[i][j]))
     return Grid(cells)
 
+def printGrid(g):
+    print('\033[F' * 45, end='\r')
+    print(g)
+    print('Guesses: %d (%d correct, %d backtracked)' % (guess_count, guess_count - unguess_count, unguess_count))
+    print('Eliminations: %d (%d correct, %d restored)' % (eliminate_count, eliminate_count - restore_count, restore_count))
+
+def solve(g, naive=False):
+    system('clear')
+    print(g)
+    eliminationChains = [EliminationChain(None,[])]
+
+    while not g.solved():
+        if g.contradictory():
+            if len(eliminationChains) == 1:
+                raise Exception('Puzzle has no solution')
+            eliminatedByGuess = g.backtrack(eliminationChains.pop())
+            eliminationChains[-1].eliminations.append(eliminatedByGuess)
+            continue
+    
+        if not naive:
+            eliminationsFromReduction = []
+            for group in g.groups():
+                eliminationsFromReduction += group.reduce()
+                printGrid(g)
+        
+            if eliminationsFromReduction:
+                eliminationChains[-1].eliminations.extend(eliminationsFromReduction)
+                continue
+        else:
+            printGrid(g)
+    
+        eliminationChains.append(EliminationChain(g.cellToGuess().guess(),[]))
+
+    printGrid(g)
+    raw_input("Solved")
+
+# Arto Inkala's "World's Hardest Sudoku"
 g = arr2grid([
     [8,0,0, 0,0,0, 0,0,0],
     [0,0,3, 6,0,0, 0,0,0],
@@ -220,29 +279,21 @@ g = arr2grid([
     [0,9,0, 0,0,0, 4,0,0]
 ])
 
-system('clear')
-print(g)
-eliminationChains = [EliminationChain(None,[])]
+# Platinum Blonde
+#g = arr2grid([
+#    [0,0,0, 0,0,0, 0,1,2],
+#    [0,0,0, 0,0,0, 0,0,3],
+#    [0,0,2, 3,0,0, 4,0,0],
+#
+#    [0,0,1, 8,0,0, 0,0,5],
+#    [0,6,0, 0,7,0, 8,0,0],
+#    [0,0,0, 0,0,9, 0,0,0],
+#
+#    [0,0,8, 5,0,0, 0,0,0],
+#    [9,0,0, 0,4,0, 5,0,0],
+#    [4,7,0, 0,0,6, 0,0,0]
+#])
 
-while not g.solved():
-    if g.contradictory():
-        if len(eliminationChains) == 1:
-            raise Exception('Puzzle has no solution')
-        eliminatedByGuess = g.backtrack(eliminationChains.pop())
-        eliminationChains[-1].eliminations.append(eliminatedByGuess)
+naive = False
 
-    eliminationsFromReduction = []
-    for group in g.groups():
-        print('\033[F' * 45, end='\r')
-        print(g)
-        print('Guesses: %d (%d correct, %d backtracked)' % (guess_count, guess_count - unguess_count, unguess_count))
-        print('Eliminations: %d (%d correct, %d restored)' % (eliminate_count, eliminate_count - restore_count, restore_count))
-        eliminationsFromReduction += group.reduce()
-
-    if eliminationsFromReduction:
-        eliminationChains[-1].eliminations.extend(eliminationsFromReduction)
-        continue
-
-    eliminationChains.append(EliminationChain(g.cellToGuess().guess(),[]))
-
-raw_input("Solved")
+solve(g, naive)
