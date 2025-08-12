@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 from __future__ import print_function
 from collections import namedtuple
 from os import system
@@ -165,7 +165,7 @@ class Grid(object):
         if idx not in self.boxCache_:
             cells = []
             for subidx in range(0,9):
-                row = (idx / 3) * 3 + (subidx / 3)
+                row = int(idx / 3) * 3 + int(subidx / 3)
                 col = (idx % 3) * 3 + (subidx % 3)
                 cells.append(self.cells_[row * 9 + col])
             self.boxCache_[idx] = Group(cells)
@@ -261,7 +261,7 @@ def solve(g, naive=False):
         eliminationChains.append(EliminationChain(g.cellToGuess().guess(),[]))
 
     printGrid(g)
-    raw_input("Solved")
+    print("Solved")
 
 # Arto Inkala's "World's Hardest Sudoku"
 g = arr2grid([
